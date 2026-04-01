@@ -121,19 +121,6 @@ export function RemarksModal({
             <AboveAverageRemarks
               remarksForm={remarksForm}
               onUpdate={onFormUpdate}
-              onAddMockScore={onAddAboveAvgMockScore}
-              onUpdateMockScore={onUpdateAboveAvgMockScore}
-              onAddScoreTrend={onAddScoreTrend}
-              onUpdateScoreTrend={onUpdateScoreTrend}
-              onCheckInAttendance={onCheckInAttendance}
-              onUpdateAttendanceLog={onUpdateAttendanceLog}
-              onAddMentorObservation={onAddMentorObservation}
-              onUpdateMentorObservation={onUpdateMentorObservation}
-              onAddGapAnalysis={onAddGapAnalysis}
-              onUpdateGapAnalysis={onUpdateGapAnalysis}
-              onRemoveGapAnalysis={onRemoveGapAnalysis}
-              onAddPlacementWeek={onAddPlacementWeek}
-              onUpdatePlacementWeek={onUpdatePlacementWeek}
             />
           )}
 

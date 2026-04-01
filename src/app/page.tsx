@@ -11,7 +11,9 @@ import { BatchModal } from "@/components/modals/BatchModal";
 import { StudentModal } from "@/components/modals/StudentModal";
 import { ImportModal } from "@/components/modals/ImportModal";
 import { RemarksModal } from "@/components/modals/RemarksModal";
+import { ReportModal } from "@/components/modals/ReportModal";
 import type { Batch, Student, RemarksCategory } from "@/components/types";
+import type { GeneratedReport } from "@/lib/reportGenerator";
 import {
   createBatch,
   fetchBatches,
@@ -21,6 +23,8 @@ import {
   fetchStudents,
   deleteStudent,
   saveCompleteEvaluation,
+  fetchStudentsWithEvaluations,
+  createBulkEvaluations,
 } from "@/lib/database";
 
 export default function App() {
@@ -58,6 +62,12 @@ export default function App() {
   const [remarksCategory, setRemarksCategory] = useState<RemarksCategory>("");
   const [remarksForm, setRemarksForm] = useState<any>({});
 
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [currentReport, setCurrentReport] = useState<GeneratedReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportSending, setReportSending] = useState(false);
+  const [isGeneratingAllReports, setIsGeneratingAllReports] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // === Supabase Data Loading ===
@@ -75,18 +85,9 @@ export default function App() {
         }));
         setBatches(formattedBatches);
 
-        // Fetch students from Supabase
-        const fetchedStudents = await fetchStudents();
-        const formattedStudents: Student[] = fetchedStudents.map((s: any) => ({
-          id: s.id,
-          name: s.full_name,
-          email: s.email,
-          batchId: s.batch_id,
-          category: "" as RemarksCategory,
-          remarksDetails: null,
-          updatedAt: s.created_at,
-        }));
-        setStudents(formattedStudents);
+        // Fetch students with their evaluations from Supabase
+        const fetchedStudents = await fetchStudentsWithEvaluations();
+        setStudents(fetchedStudents as Student[]);
       } catch (error) {
         console.error("Error loading data from Supabase:", error);
         // Fall back to localStorage if Supabase fails
@@ -166,7 +167,19 @@ export default function App() {
       // Save to Supabase
       await createStudent(newStudent);
       
-      setStudents([...students, newStudent]);
+      // If student has a category, create an evaluation for them
+      if (studentForm.category && ["Good", "Above Average", "Average", "Poor"].includes(studentForm.category)) {
+        await createBulkEvaluations([newStudent]);
+      }
+      
+      // Reload students to get updated category/evaluation data
+      const updatedStudents = await fetchStudentsWithEvaluations(studentForm.batchId);
+      setStudents((prev) => {
+        // Combine with existing students from other batches
+        const otherBatchStudents = prev.filter((s) => s.batchId !== studentForm.batchId);
+        return [...otherBatchStudents, ...updatedStudents];
+      });
+
       setStudentForm({
         id: "",
         name: "",
@@ -175,9 +188,11 @@ export default function App() {
         batchId: "",
       });
       setShowStudentModal(false);
+      alert("Student added successfully!");
     } catch (error) {
-      console.error("Error adding student:", error);
-      alert("Failed to add student. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error("Error adding student:", errorMessage);
+      alert(`Failed to add student: ${errorMessage}`);
     }
   };
 
@@ -277,17 +292,43 @@ export default function App() {
           });
 
           // Save to Supabase
-          await createBulkStudents(importedStudents);
+          const result = await createBulkStudents(importedStudents);
 
-          setStudents((prev) => [...prev, ...importedStudents]);
+          // Create evaluations for students that have categories
+          const evalResult = await createBulkEvaluations(importedStudents);
+          console.log("Evaluations created:", evalResult.created);
+
+          // Reload students from database to get updated categories/evaluations
+          const updatedStudents = await fetchStudentsWithEvaluations(importBatchId);
+          setStudents((prev) => {
+            // Combine with existing students from other batches
+            const otherBatchStudents = prev.filter((s) => s.batchId !== importBatchId);
+            return [...otherBatchStudents, ...updatedStudents];
+          });
+
           if (fileInputRef.current) {
             fileInputRef.current.value = "";
           }
           setShowImportModal(false);
-          alert(`Successfully imported ${importedStudents.length} students!`);
+
+          // Show detailed results
+          let message = `Import completed:\n`;
+          message += `✅ Successfully imported: ${result.results.successful}\n`;
+          if (evalResult.created > 0)
+            message += `✅ Categories assigned: ${evalResult.created}\n`;
+          if (result.results.duplicates > 0)
+            message += `⚠️ Duplicates skipped: ${result.results.duplicates}\n`;
+          if (result.results.failed > 0)
+            message += `❌ Failed: ${result.results.failed}`;
+
+          alert(message);
         } catch (error) {
           console.error("Error importing students:", error);
-          alert("Failed to import students. Please try again.");
+          alert(
+            `Failed to import students: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          );
         }
       };
       reader.readAsBinaryString(file);
@@ -298,11 +339,25 @@ export default function App() {
 
   // --- Handlers: Remarks ---
   const handleOpenRemarks = (student: Student) => {
+    console.log("Opening remarks for student:", student);
     setSelectedStudent(student);
     setRemarksCategory(student.category || "Good");
 
     let initialRemarks = student.remarksDetails || {};
-    if ((student.category === "Good" || !student.category) && Object.keys(initialRemarks).length === 0) {
+
+    // If remarks details already exist from database, use them as-is
+    if (student.remarksDetails && Object.keys(student.remarksDetails).length > 0) {
+      console.log("Loading existing remarks:", initialRemarks);
+      setRemarksForm(initialRemarks);
+      setShowRemarksModal(true);
+      return;
+    }
+
+    // Otherwise, initialize empty form based on category
+    const category = student.category || "Good";
+    console.log("Initializing empty form for category:", category);
+
+    if (category === "Good" || !category) {
       initialRemarks = {
         mockScores: [],
         calculatedAverage: 0,
@@ -317,9 +372,7 @@ export default function App() {
         customTier: "",
         projectionJustification: "",
       };
-    }
-
-    if (student.category === "Above Average" && Object.keys(initialRemarks).length === 0) {
+    } else if (category === "Above Average") {
       initialRemarks = {
         mockScores: [],
         calculatedAverage: 0,
@@ -328,6 +381,20 @@ export default function App() {
         mentorObservations: [],
         gapAnalysis: [],
         placementTimeline: [],
+      };
+    } else if (category === "Average") {
+      initialRemarks = {
+        checkpointScores: [0, 0, 0, 0],
+        dailyPractice: 0,
+        workshopAttendance: 0,
+        readiness: "",
+      };
+    } else if (category === "Poor") {
+      initialRemarks = {
+        progress: 0,
+        submissionStats: "",
+        buddyNotes: "",
+        remedialScores: [0, 0, 0],
       };
     }
 
@@ -477,6 +544,8 @@ export default function App() {
   const handleSaveRemarks = async () => {
     if (!selectedStudent) return;
     try {
+      console.log("Saving remarks for student:", selectedStudent.id, "Category:", remarksCategory, "Data:", remarksForm);
+      
       // Save to Supabase
       await saveCompleteEvaluation(
         selectedStudent.id,
@@ -500,8 +569,106 @@ export default function App() {
       setShowRemarksModal(false);
       alert("Remarks saved successfully!");
     } catch (error) {
-      console.error("Error saving remarks:", error);
-      alert("Failed to save remarks. Please try again.");
+      const errorDetail = error instanceof Error ? error.message : JSON.stringify(error);
+      console.error("Error saving remarks:", errorDetail);
+      alert(`Failed to save remarks: ${errorDetail}`);
+    }
+  };
+
+  // --- Report Generation Handlers ---
+  const handleViewReport = async (student: Student) => {
+    try {
+      setReportLoading(true);
+      setCurrentReport(null);
+      setShowReportModal(true);
+
+      const response = await fetch("/api/generate-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate report");
+      }
+
+      const report = await response.json();
+      setCurrentReport(report);
+    } catch (error) {
+      console.error("Error generating report:", error);
+      alert(`Failed to generate report: ${error}`);
+      setShowReportModal(false);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const handleGenerateAllReports = async () => {
+    if (filteredAndSortedStudents.length === 0) {
+      alert("No students to generate reports for");
+      return;
+    }
+
+    if (!confirm(`Generate and send reports for ${filteredAndSortedStudents.length} student(s)?`)) {
+      return;
+    }
+
+    try {
+      setIsGeneratingAllReports(true);
+      
+      const response = await fetch("/api/generate-reports-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ students: filteredAndSortedStudents }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate reports");
+      }
+
+      const result = await response.json();
+      alert(
+        `✅ Generated ${result.reportsGenerated} report(s)\n\nReports have been sent to recipients via n8n. Check your email notifications.`
+      );
+    } catch (error) {
+      console.error("Error generating all reports:", error);
+      alert(`Failed to generate reports: ${error}`);
+    } finally {
+      setIsGeneratingAllReports(false);
+    }
+  };
+
+  const handleSendReportEmail = async (report: GeneratedReport) => {
+    try {
+      setReportSending(true);
+
+      const response = await fetch(process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || "", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentEmail: report.studentEmail,
+          studentName: report.studentName,
+          tier: report.tier,
+          report: {
+            whatWentWell: report.whatWentWell,
+            gaps: report.gaps,
+            nextSteps: report.nextSteps,
+            projections: report.projections,
+          },
+          generatedAt: report.generatedAt,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to send email");
+      }
+
+      alert(`Report sent to ${report.studentEmail}`);
+    } catch (error) {
+      console.error("Error sending email:", error);
+      alert(`Failed to send email: ${error}`);
+    } finally {
+      setReportSending(false);
     }
   };
 
@@ -588,6 +755,13 @@ export default function App() {
                 </p>
               </div>
               <div className="flex gap-2">
+                <button
+                  onClick={handleGenerateAllReports}
+                  disabled={isGeneratingAllReports}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingAllReports ? "Generating..." : "📄 Generate Reports for All"}
+                </button>
                 {selectedStudentIds.size > 0 && (
                   <button
                     onClick={handleBulkDelete}
@@ -618,6 +792,7 @@ export default function App() {
               onSelectAll={() => toggleSelectAll(paginatedStudents)}
               onToggleSelect={toggleStudentSelection}
               onOpenRemarks={handleOpenRemarks}
+              onViewReport={handleViewReport}
               onDelete={handleDeleteStudent}
             />
           </div>
@@ -685,6 +860,15 @@ export default function App() {
         onUpdatePlacementWeek={handleUpdatePlacementWeek}
         onSave={handleSaveRemarks}
         onClose={() => setShowRemarksModal(false)}
+      />
+
+      <ReportModal
+        isOpen={showReportModal}
+        report={currentReport}
+        isLoading={reportLoading}
+        isSending={reportSending}
+        onClose={() => setShowReportModal(false)}
+        onSendEmail={handleSendReportEmail}
       />
     </div>
   );
