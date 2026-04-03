@@ -1,6 +1,7 @@
 "use client";
 
-import { MessageCircle, Trash2, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { MessageCircle, Trash2, FileText, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import type { Student } from "../types";
 
 interface StudentListProps {
@@ -36,7 +37,7 @@ export function StudentList({
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex-1 overflow-hidden flex flex-col">
       {/* Header Row */}
-      <div className="flex items-center text-xs uppercase tracking-wider font-bold text-slate-500 bg-slate-50 p-4 border-b border-slate-200 sticky top-0 z-10">
+      <div className="flex items-center text-xs uppercase tracking-wider font-bold text-slate-500 bg-slate-50 p-3 border-b border-slate-200 sticky top-0 z-10">
         <div className="w-12 text-center shrink-0">
           <input
             type="checkbox"
@@ -45,11 +46,13 @@ export function StudentList({
             onChange={onSelectAll}
           />
         </div>
-        <div className="w-1/6 px-2">ID</div>
-        <div className="w-1/5 px-2">Name</div>
-        <div className="w-1/4 px-2">Email</div>
-        <div className="w-1/6 px-2">Category</div>
-        <div className="w-1/6 px-2 text-right">Actions</div>
+        <div className="w-4 px-1"></div>
+        <div className="w-20 px-2">ID</div>
+        <div className="flex-1 min-w-0 px-2">Name</div>
+        <div className="flex-1 min-w-0 px-2">Email</div>
+        <div className="w-40 pl-1 pr-2">Category</div>
+        <div className="w-24 pl-1 pr-2 text-center">Remarks</div>
+        <div className="flex-shrink-0 pl-1 pr-2 text-right">Actions</div>
       </div>
 
       <div className="flex flex-col flex-1 overflow-y-auto">
@@ -111,10 +114,13 @@ interface StudentItemProps {
 }
 
 function StudentItem({ student: s, isSelected, onToggleSelect, onOpenRemarks, onViewReport, onDelete }: StudentItemProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   return (
-    <div className="border-b last:border-none bg-white hover:bg-gray-50 text-sm overflow-hidden">
-      <div className={`flex items-center p-3 ${isSelected ? "bg-blue-50" : ""}`}>
-        <div className="w-10 text-center shrink-0">
+    <>
+      <div className="border-b last:border-none bg-white hover:bg-gray-50 text-sm overflow-hidden">
+      <div className={`flex items-center p-3 cursor-pointer ${isSelected ? "bg-blue-50" : ""}`} onClick={() => setIsExpanded(!isExpanded)}>
+        <div className="w-12 text-center shrink-0" onClick={(e) => e.stopPropagation()}>
           <input
             type="checkbox"
             className="cursor-pointer rounded w-4 h-4"
@@ -122,14 +128,20 @@ function StudentItem({ student: s, isSelected, onToggleSelect, onOpenRemarks, on
             onChange={() => onToggleSelect(s.id)}
           />
         </div>
-        <div className="w-1/6 px-2 text-gray-500 font-mono text-xs truncate" title={s.id}>
+        <div className="w-4 px-1">
+          <ChevronDown 
+            size={16} 
+            className={`transition-transform ${isExpanded ? "rotate-180" : ""} text-gray-400`}
+          />
+        </div>
+        <div className="w-20 px-2 text-gray-500 font-mono text-xs truncate" title={s.id}>
           {s.id.length > 12 ? s.id.substring(0, 8) + "..." : s.id}
         </div>
-        <div className="w-1/5 px-2 font-medium truncate">{s.name}</div>
-        <div className="w-1/4 px-2 text-gray-600 truncate">{s.email}</div>
-        <div className="w-1/6 px-2">
+        <div className="flex-1 min-w-0 px-2 font-medium truncate" title={s.name}>{s.name}</div>
+        <div className="flex-1 min-w-0 px-2 text-gray-600 truncate" title={s.email}>{s.email}</div>
+        <div className="w-40 pl-1 pr-2">
           <span
-            className={`px-2 py-1 rounded text-xs font-semibold ${
+            className={`py-1 rounded text-xs font-semibold truncate block ${
               s.category === "Good"
                 ? "bg-green-100 text-green-800"
                 : s.category === "Above Average"
@@ -144,7 +156,16 @@ function StudentItem({ student: s, isSelected, onToggleSelect, onOpenRemarks, on
             {s.category || "Pending"}
           </span>
         </div>
-        <div className="w-1/6 px-2 flex items-center justify-end gap-2" style={{ minWidth: "300px" }}>
+        <div className="w-24 pl-1 pr-2 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => onOpenRemarks(s)}
+            title="Remarks"
+            className="p-1.5 bg-black text-white hover:bg-gray-800 rounded flex items-center gap-2 text-xs font-medium whitespace-nowrap"
+          >
+            <MessageCircle size={14} /> Remarks
+          </button>
+        </div>
+        <div className="flex-shrink-0 pl-1 pr-2 flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => onViewReport(s)}
             title="View Report"
@@ -152,19 +173,42 @@ function StudentItem({ student: s, isSelected, onToggleSelect, onOpenRemarks, on
           >
             <FileText size={14} /> Report
           </button>
-          <button
-            onClick={() => onOpenRemarks(s)}
-            title="Remarks"
-            className="p-1.5 bg-black text-white hover:bg-gray-800 rounded flex items-center gap-2 text-xs font-medium"
-          >
-            <MessageCircle size={14} /> Remarks
-          </button>
           <button onClick={() => onDelete(s.id)} className="text-red-500 hover:text-red-700">
             <Trash2 size={16} />
           </button>
         </div>
       </div>
-    </div>
+      </div>
+
+      {isExpanded && (
+        <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-t-2 border-blue-300 p-6 w-full">
+          <div className="space-y-4">
+            <div>
+              <p className="text-blue-900 font-bold text-sm uppercase tracking-wide">Full Name</p>
+              <p className="text-gray-900 mt-2 text-lg font-semibold break-words">{s.name}</p>
+            </div>
+            <div>
+              <p className="text-blue-900 font-bold text-sm uppercase tracking-wide">Email</p>
+              <p className="text-gray-900 mt-2 text-lg font-mono break-all">{s.email}</p>
+            </div>
+            <div>
+              <p className="text-blue-900 font-bold text-sm uppercase tracking-wide">Student ID</p>
+              <p className="text-gray-900 mt-2 text-lg font-mono">{s.id}</p>
+            </div>
+            <div>
+              <p className="text-blue-900 font-bold text-sm uppercase tracking-wide">Category</p>
+              <p className="text-gray-900 mt-2 text-lg font-semibold">{s.category || "Pending"}</p>
+            </div>
+            {s.updatedAt && (
+              <div>
+                <p className="text-blue-900 font-bold text-sm uppercase tracking-wide">Last Updated</p>
+                <p className="text-gray-900 mt-2 text-lg">{new Date(s.updatedAt).toLocaleString()}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
