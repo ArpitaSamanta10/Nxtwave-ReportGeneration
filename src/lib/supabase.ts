@@ -7,4 +7,27 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase credentials in environment variables");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Browser-compatible storage for session persistence
+const browserStorage = {
+  getItem: (key: string) => {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem(key);
+  },
+  setItem: (key: string, value: string) => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(key, value);
+  },
+  removeItem: (key: string) => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(key);
+  },
+};
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: browserStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});

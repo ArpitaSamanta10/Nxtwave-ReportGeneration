@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Download, Send } from "lucide-react";
+import { X, Download, Send, Save } from "lucide-react";
 import type { GeneratedReport } from "@/lib/reportGenerator";
 
 interface ReportModalProps {
@@ -9,7 +9,10 @@ interface ReportModalProps {
   isLoading: boolean;
   onClose: () => void;
   onSendEmail: (report: GeneratedReport) => void;
+  onSave: (report: GeneratedReport) => void;
   isSending: boolean;
+  isSaving?: boolean;
+  isSaved?: boolean;
 }
 
 export function ReportModal({
@@ -18,7 +21,10 @@ export function ReportModal({
   isLoading,
   onClose,
   onSendEmail,
+  onSave,
   isSending,
+  isSaving = false,
+  isSaved = false,
 }: ReportModalProps) {
   if (!isOpen) return null;
 
@@ -155,6 +161,13 @@ ${report.projections}
               className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium"
             >
               <Download size={18} /> Download
+            </button>
+            <button
+              onClick={() => onSave(report)}
+              disabled={isSaving || isSaved}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save size={18} /> {isSaving ? "Saving..." : isSaved ? "Saved" : "Save Report"}
             </button>
             <button
               onClick={() => onSendEmail(report)}

@@ -855,6 +855,7 @@ export async function fetchEvaluationsForStudent(studentId: string) {
       .from("evaluations")
       .select("*")
       .eq("student_id", studentId)
+      .order("updated_at", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) throw error;

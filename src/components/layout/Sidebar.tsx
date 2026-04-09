@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, FileText } from "lucide-react";
 import type { Batch } from "../types";
 
 interface SidebarProps {
@@ -11,6 +11,7 @@ interface SidebarProps {
   onBatchDelete: (id: string) => void;
   onAddStudentClick: () => void;
   onImportClick: () => void;
+  onCreateReportClick: () => void;
 }
 
 export function Sidebar({
@@ -21,6 +22,7 @@ export function Sidebar({
   onBatchDelete,
   onAddStudentClick,
   onImportClick,
+  onCreateReportClick,
 }: SidebarProps) {
   return (
     <aside className="w-1/4 bg-white border-r border-slate-200 h-full flex flex-col shadow-sm z-0">
@@ -101,6 +103,12 @@ export function Sidebar({
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm w-full transition-all bg-blue-600 text-white hover:bg-blue-700 shadow-sm font-medium"
           >
             <span></span> Import from Sheet
+          </button>
+          <button
+            onClick={onCreateReportClick}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm w-full transition-all bg-green-600 text-white hover:bg-green-700 shadow-sm font-medium"
+          >
+            <FileText size={16} /> Create Report
           </button>
         </div>
       </div>
